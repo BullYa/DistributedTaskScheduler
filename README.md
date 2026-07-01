@@ -1,28 +1,45 @@
 # DistributedTaskScheduler
 
-Aplikacija namijenjena za raspodjelu i izvršavanje zadataka u raspodijeljenom okruženju. Sustav omogućuje slanje, planiranje i obradu zadataka kroz mrežu neovisnih radnih čvorova (worker nodes), čime se postiže veća učinkovitost, skalabilnost i otpornost na kvarove.
+Projektni zadatak za kolegij Raspodijeljeni sustavi.
 
-## Cilj projekta
+Ideja je napraviti sustav koji prima zadatke i raspoređuje ih na više worker čvorova koji rade paralelno. Scheduler odlučuje tko što radi, workeri samo izvršavaju i javljaju natrag rezultat. Ako jedan worker crkne, zadatak ide drugome.
 
-Ravnomjerno raspodijeliti radno opterećenje te osigurati pouzdano izvršavanje zadataka čak i u uvjetima promjenjivog opterećenja ili parcijalnih kvarova sustava.
+## Kako to radi
 
-## Arhitektura
+Dva tipa servisa:
 
-Sustav se sastoji od:
+- **scheduler** — prima zadatke od klijenta, drži red čekanja, bira workera i šalje mu posao
+- **worker** — pokreće se kao zaseban servis (može ih biti više), prima zadatak, izvršava ga asinkrono i javlja status
 
-- **Scheduler (centralni planer)** – prima zadatke, vodi evidenciju dostupnih radnih čvorova i dinamički im dodjeljuje zadatke na temelju trenutnog opterećenja i dostupnosti.
-- **Worker Nodes (radni čvorovi)** – izvršavaju zadatke neovisno, prijavljuju se planeru i periodički javljaju svoje stanje (heartbeat).
+Scheduler sam nikad ne izvršava zadatke, samo koordinira.
 
-Planer sam ne izvršava zadatke, već isključivo koordinira raspodjelu rada.
+## Što je trenutno napravljeno
 
-## Status razvoja
-
-Projekt je u izradi. Trenutno implementirano:
-
-- [x] Inicijalna struktura projekta
-
-Plan daljnjeg razvoja dokumentiran je kroz commit povijest.
+- [x] Osnovna struktura projekta
+- [x] Scheduler prima zadatke i drži evidenciju (`/submit-task`, `/tasks`)
+- [x] Worker prima i asinkrono izvršava zadatke (`/execute`, `/status`)
+- [ ] Scheduler šalje zadatke workeru (HTTP)
+- [ ] Registracija workera i heartbeat
+- [ ] Load balancing (least-loaded)
+- [ ] Fault tolerance — re-dodjela zadataka kad worker padne
+- [ ] Docker
 
 ## Pokretanje
 
-_Upute za pokretanje bit će dodane kako se servisi budu implementirali._
+```bash
+pip install -r requirements.txt
+```
+
+U jednom terminalu:
+```bash
+uvicorn scheduler.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+U drugom:
+```bash
+uvicorn worker.main:app --host 0.0.0.0 --port 8001 --reload
+```
+
+Swagger UI:
+- scheduler → http://localhost:8000/docs
+- worker → http://localhost:8001/docs
