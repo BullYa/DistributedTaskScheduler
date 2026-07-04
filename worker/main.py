@@ -16,8 +16,8 @@ active_tasks: dict = {}
 
 
 async def send_heartbeat():
-    """Javlja se scheduleru svakih 5 sekundi s trenutnim opterećenjem."""
-    await asyncio.sleep(3)
+    """Svakih 5 sekundi javimo scheduleru da smo zivi i koliko posla imamo."""
+    await asyncio.sleep(3)  # da se scheduler stigne dici
     while True:
         in_progress = sum(1 for t in active_tasks.values() if t["status"] == "in_progress")
         try:
@@ -34,7 +34,7 @@ async def send_heartbeat():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # registracija kod schedulera, uz par pokušaja ako se scheduler tek diže
+    # prijavimo se scheduleru, par pokusaja za slucaj da se on jos dize
     for attempt in range(5):
         try:
             async with httpx.AsyncClient() as client:
@@ -70,7 +70,7 @@ class TaskResult(BaseModel):
 
 
 async def report_completed(task_id: str, result: str):
-    """Javi scheduleru da je zadatak gotov."""
+    """Javimo scheduleru da je zadatak gotov."""
     try:
         async with httpx.AsyncClient() as client:
             await client.post(
@@ -86,7 +86,7 @@ async def process_task(task_id: str, name: str, payload: str):
     print(f"[WORKER-{WORKER_ID}] počinjem: {task_id} | {name}")
     active_tasks[task_id]["status"] = "in_progress"
 
-    # simulacija obrade - asyncio.sleep ne blokira primanje novih zadataka
+    # simulacija posla, sleep je async pa u meduvremenu normalno primamo nove zadatke
     await asyncio.sleep(5)
 
     result = f"Zadatak '{name}' izvršen. Payload: {payload}"
@@ -107,7 +107,7 @@ async def execute_task(task: TaskRequest):
         "result": None
     }
 
-    # ne čekamo da završi - odmah vraćamo odgovor scheduleru
+    # obrada ide u pozadini, scheduleru odmah vracamo da smo preuzeli
     asyncio.create_task(process_task(task.task_id, task.name, task.payload))
 
     return TaskResult(
