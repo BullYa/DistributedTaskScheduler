@@ -16,8 +16,8 @@ active_tasks: dict = {}
 
 
 async def send_heartbeat():
-    """Šalje heartbeat scheduleru svakih 5 sekundi."""
-    await asyncio.sleep(3)  # malo pričekaj da se scheduler sigurno pokrenuo
+    """Javlja se scheduleru svakih 5 sekundi s trenutnim opterećenjem."""
+    await asyncio.sleep(3)
     while True:
         in_progress = sum(1 for t in active_tasks.values() if t["status"] == "in_progress")
         try:
@@ -34,7 +34,7 @@ async def send_heartbeat():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # pokušaj se registrirati, daj scheduleru malo vremena ako se tek pokreće
+    # registracija kod schedulera, uz par pokušaja ako se scheduler tek diže
     for attempt in range(5):
         try:
             async with httpx.AsyncClient() as client:
@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
             print(f"[WORKER-{WORKER_ID}] registriran @ {SCHEDULER_URL}")
             break
         except Exception as e:
-            print(f"[WORKER-{WORKER_ID}] registracija neuspješna (pokušaj {attempt + 1}/5): {e}")
+            print(f"[WORKER-{WORKER_ID}] registracija neuspješna ({attempt + 1}/5): {e}")
             await asyncio.sleep(2)
 
     asyncio.create_task(send_heartbeat())
@@ -69,6 +69,19 @@ class TaskResult(BaseModel):
     result: Optional[str] = None
 
 
+async def report_completed(task_id: str, result: str):
+    """Javi scheduleru da je zadatak gotov."""
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"{SCHEDULER_URL}/task-completed",
+                json={"task_id": task_id, "worker_id": WORKER_ID, "result": result},
+                timeout=3.0
+            )
+    except Exception as e:
+        print(f"[WORKER-{WORKER_ID}] nisam uspio javiti rezultat za {task_id}: {e}")
+
+
 async def process_task(task_id: str, name: str, payload: str):
     print(f"[WORKER-{WORKER_ID}] počinjem: {task_id} | {name}")
     active_tasks[task_id]["status"] = "in_progress"
@@ -76,9 +89,12 @@ async def process_task(task_id: str, name: str, payload: str):
     # simulacija obrade - asyncio.sleep ne blokira primanje novih zadataka
     await asyncio.sleep(5)
 
+    result = f"Zadatak '{name}' izvršen. Payload: {payload}"
     active_tasks[task_id]["status"] = "completed"
-    active_tasks[task_id]["result"] = f"Zadatak '{name}' izvršen. Payload: {payload}"
+    active_tasks[task_id]["result"] = result
     print(f"[WORKER-{WORKER_ID}] završio: {task_id}")
+
+    await report_completed(task_id, result)
 
 
 @app.post("/execute", response_model=TaskResult)
