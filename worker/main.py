@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 import os
+import socket
 from typing import Optional
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
@@ -10,7 +11,12 @@ import httpx
 WORKER_ID = str(uuid.uuid4())[:8]
 SCHEDULER_URL = os.getenv("SCHEDULER_URL", "http://localhost:8000")
 WORKER_PORT = int(os.getenv("WORKER_PORT", "8001"))
-WORKER_URL = f"http://localhost:{WORKER_PORT}"
+# u dockeru je ovo ime containera, lokalno localhost
+WORKER_HOST = os.getenv("WORKER_HOST", "localhost")
+if WORKER_HOST == "auto":
+    # svaki container javi svoj hostname, bitno kad se workeri skaliraju
+    WORKER_HOST = socket.gethostname()
+WORKER_URL = f"http://{WORKER_HOST}:{WORKER_PORT}"
 
 active_tasks: dict = {}
 

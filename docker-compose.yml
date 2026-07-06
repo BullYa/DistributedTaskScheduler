@@ -1,0 +1,19 @@
+services:
+  scheduler:
+    build:
+      context: .
+      dockerfile: scheduler/Dockerfile
+    ports:
+      - "8000:8000"
+
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    environment:
+      - SCHEDULER_URL=http://scheduler:8000
+      - WORKER_PORT=8001
+      - WORKER_HOST=auto
+    depends_on:
+      - scheduler
+    # broj workera se mijenja s: docker compose up --scale worker=3
