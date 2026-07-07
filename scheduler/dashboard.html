@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DistributedTaskScheduler</title>
+<style>
+  :root {
+    --bg: #12151a;
+    --panel: #1a1f27;
+    --border: #2a3140;
+    --text: #d7dde6;
+    --muted: #7d8899;
+    --green: #46c07a;
+    --amber: #d9a13c;
+    --red: #d95656;
+    --blue: #5a9bd4;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 24px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+  }
+  h1 { font-size: 18px; font-weight: 600; }
+  h1 span { color: var(--muted); font-weight: 400; }
+  #refresh-info { color: var(--muted); font-size: 12px; }
+  h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin: 20px 0 10px;
+  }
+  .workers { display: flex; flex-wrap: wrap; gap: 10px; }
+  .worker-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    min-width: 210px;
+  }
+  .worker-card.dead { opacity: 0.55; }
+  .worker-id { font-family: ui-monospace, Consolas, monospace; font-size: 14px; }
+  .worker-url { color: var(--muted); font-size: 12px; margin-top: 2px; font-family: ui-monospace, Consolas, monospace; }
+  .worker-meta { margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .dot.alive { background: var(--green); }
+  .dot.dead { background: var(--red); }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  th, td { padding: 8px 12px; text-align: left; font-size: 13px; }
+  th { background: #151920; color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  tr + tr td { border-top: 1px solid var(--border); }
+  td.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge.queued     { background: #2a3140; color: var(--muted); }
+  .badge.dispatched { background: rgba(217,161,60,.15); color: var(--amber); }
+  .badge.completed  { background: rgba(70,192,122,.15); color: var(--green); }
+  .empty { color: var(--muted); font-size: 13px; padding: 14px; }
+  .stats { color: var(--muted); font-size: 12px; margin-left: 8px; }
+  footer { margin-top: 24px; color: var(--muted); font-size: 11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>DistributedTaskScheduler <span>· nadzorna ploča</span></h1>
+  <div id="refresh-info">učitavam...</div>
+</header>
+<div style="margin:-8px 0 16px"><a href="/docs" style="color:var(--blue);font-size:13px;text-decoration:none">API dokumentacija (/docs) →</a></div>
+
+<h2>Workeri <span class="stats" id="worker-stats"></span></h2>
+<div class="workers" id="workers"><div class="empty">Nema registriranih workera.</div></div>
+
+<h2>Zadaci <span class="stats" id="task-stats"></span></h2>
+<div id="tasks-wrap"><div class="empty">Još nema zadataka. Pošalji jedan preko <a href="/docs" style="color:var(--blue)">/docs</a>.</div></div>
+
+<footer>Osvježava se automatski svake 2 sekunde · podaci s /workers i /tasks</footer>
+
+<script>
+function relTime(ts) {
+  // heartbeat timestamp je unix vrijeme sa servera
+  var diff = Math.max(0, Math.round(Date.now() / 1000 - ts));
+  return "prije " + diff + " s";
+}
+
+function render(workersData, tasksData) {
+  var wEl = document.getElementById("workers");
+  var workers = workersData.workeri || {};
+  var ids = Object.keys(workers);
+  var alive = 0;
+
+  if (ids.length === 0) {
+    wEl.innerHTML = '<div class="empty">Nema registriranih workera.</div>';
+  } else {
+    var html = "";
+    ids.forEach(function(id) {
+      var w = workers[id];
+      if (w.status === "alive") alive++;
+      html += '<div class="worker-card ' + w.status + '">'
+        + '<div class="worker-id"><span class="dot ' + w.status + '"></span>' + id + '</div>'
+        + '<div class="worker-url">' + w.url + '</div>'
+        + '<div class="worker-meta">aktivni zadaci: ' + w.active_tasks
+        + ' · heartbeat ' + relTime(w.last_heartbeat) + '</div>'
+        + '</div>';
+    });
+    wEl.innerHTML = html;
+  }
+  document.getElementById("worker-stats").textContent =
+    ids.length ? (alive + " / " + ids.length + " živo") : "";
+
+  var tEl = document.getElementById("tasks-wrap");
+  var tasks = (tasksData.svi || []).slice().reverse(); // najnoviji na vrhu
+  if (tasks.length === 0) {
+    tEl.innerHTML = '<div class="empty">Još nema zadataka. Pošalji jedan preko <a href="/docs" style="color:var(--blue)">/docs</a>.</div>';
+  } else {
+    var rows = tasks.map(function(t) {
+      return "<tr>"
+        + '<td class="mono">' + t.task_id.slice(0, 8) + '</td>'
+        + "<td>" + escapeHtml(t.name) + "</td>"
+        + '<td><span class="badge ' + t.status + '">' + t.status + "</span></td>"
+        + '<td class="mono">' + (t.worker_id || "—") + "</td>"
+        + "<td>" + (t.result ? escapeHtml(t.result) : "—") + "</td>"
+        + "</tr>";
+    }).join("");
+    tEl.innerHTML = "<table><thead><tr>"
+      + "<th>ID</th><th>Naziv</th><th>Status</th><th>Worker</th><th>Rezultat</th>"
+      + "</tr></thead><tbody>" + rows + "</tbody></table>";
+  }
+  var done = tasks.filter(function(t){ return t.status === "completed"; }).length;
+  document.getElementById("task-stats").textContent =
+    tasks.length ? (done + " / " + tasks.length + " završeno · " + tasksData.u_redu + " u redu") : "";
+}
+
+function escapeHtml(s) {
+  var d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+async function refresh() {
+  try {
+    var [wr, tr] = await Promise.all([fetch("/workers"), fetch("/tasks")]);
+    render(await wr.json(), await tr.json());
+    document.getElementById("refresh-info").textContent =
+      "zadnje osvježeno: " + new Date().toLocaleTimeString();
+  } catch (e) {
+    document.getElementById("refresh-info").textContent = "greška pri dohvaćanju: " + e;
+  }
+}
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

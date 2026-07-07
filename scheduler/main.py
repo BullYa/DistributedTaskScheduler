@@ -1,11 +1,13 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from collections import deque
 import uuid
 import asyncio
 import httpx
 import time
+import os
 
 # zadaci koji jos cekaju da ih netko preuzme
 task_queue: deque = deque()
@@ -116,7 +118,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Task Scheduler", lifespan=lifespan)
+app = FastAPI(title="Task Scheduler", lifespan=lifespan, docs_url=None)
 
 
 class TaskRequest(BaseModel):
@@ -146,7 +148,19 @@ class TaskCompleted(BaseModel):
     result: str
 
 
-@app.post("/register")
+@app.get("/", include_in_schema=False)
+async def dashboard():
+    # nadzorna ploca, obicna html stranica koja vuce /tasks i /workers
+    return FileResponse(os.path.join(os.path.dirname(__file__), "dashboard.html"))
+
+
+@app.get("/docs", include_in_schema=False)
+async def dark_docs():
+    # swagger u tamnoj temi da se slaze s plocom
+    return FileResponse(os.path.join(os.path.dirname(__file__), "docs_dark.html"))
+
+
+@app.post("/register", tags=["interno (worker ↔ scheduler)"])
 async def register_worker(data: WorkerRegister):
     workers[data.worker_id] = {
         "url": data.url,
@@ -158,7 +172,7 @@ async def register_worker(data: WorkerRegister):
     return {"message": "ok"}
 
 
-@app.post("/heartbeat")
+@app.post("/heartbeat", tags=["interno (worker ↔ scheduler)"])
 async def heartbeat(data: HeartbeatRequest):
     if data.worker_id not in workers:
         raise HTTPException(status_code=404, detail="worker nije registriran")
@@ -172,7 +186,7 @@ async def heartbeat(data: HeartbeatRequest):
     return {"message": "ok"}
 
 
-@app.post("/task-completed")
+@app.post("/task-completed", tags=["interno (worker ↔ scheduler)"])
 async def task_completed(data: TaskCompleted):
     if data.task_id not in tasks:
         raise HTTPException(status_code=404, detail="nepoznat zadatak")
@@ -190,7 +204,7 @@ async def task_completed(data: TaskCompleted):
     return {"message": "ok"}
 
 
-@app.post("/submit-task", response_model=TaskResponse)
+@app.post("/submit-task", response_model=TaskResponse, tags=["klijent"])
 async def submit_task(task: TaskRequest):
     task_id = str(uuid.uuid4())
 
@@ -222,7 +236,7 @@ async def submit_task(task: TaskRequest):
     )
 
 
-@app.get("/tasks")
+@app.get("/tasks", tags=["klijent"])
 async def get_tasks():
     return {
         "u_redu": len(task_queue),
@@ -230,19 +244,19 @@ async def get_tasks():
     }
 
 
-@app.get("/tasks/{task_id}")
+@app.get("/tasks/{task_id}", tags=["klijent"])
 async def get_task(task_id: str):
     if task_id not in tasks:
         raise HTTPException(status_code=404, detail="zadatak nije pronađen")
     return tasks[task_id]
 
 
-@app.get("/workers")
+@app.get("/workers", tags=["klijent"])
 async def get_workers():
     return {"workeri": workers}
 
 
-@app.get("/health")
+@app.get("/health", tags=["klijent"])
 async def health():
     alive = sum(1 for w in workers.values() if w["status"] == "alive")
     return {"status": "ok", "service": "scheduler", "aktivni_workeri": alive}

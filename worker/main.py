@@ -77,15 +77,19 @@ class TaskResult(BaseModel):
 
 async def report_completed(task_id: str, result: str):
     """Javimo scheduleru da je zadatak gotov."""
-    try:
-        async with httpx.AsyncClient() as client:
-            await client.post(
-                f"{SCHEDULER_URL}/task-completed",
-                json={"task_id": task_id, "worker_id": WORKER_ID, "result": result},
-                timeout=3.0
-            )
-    except Exception as e:
-        print(f"[WORKER-{WORKER_ID}] nisam uspio javiti rezultat za {task_id}: {e}")
+    # par pokusaja, ako potvrda ne prodje zadatak bi kod schedulera visio kao dispatched zauvijek
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{SCHEDULER_URL}/task-completed",
+                    json={"task_id": task_id, "worker_id": WORKER_ID, "result": result},
+                    timeout=3.0
+                )
+            return
+        except Exception as e:
+            print(f"[WORKER-{WORKER_ID}] javljanje rezultata za {task_id} nije proslo ({attempt + 1}/3): {e}")
+            await asyncio.sleep(2)
 
 
 async def process_task(task_id: str, name: str, payload: str):

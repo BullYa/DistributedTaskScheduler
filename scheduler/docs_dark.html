@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task Scheduler - API docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
+<style>
+  /* tamna tema preko standardnog swaggera, iste boje kao nadzorna ploca */
+  :root {
+    --bg: #12151a;
+    --panel: #1a1f27;
+    --panel2: #151920;
+    --border: #2a3140;
+    --text: #d7dde6;
+    --muted: #7d8899;
+  }
+  body { background: var(--bg); }
+  .swagger-ui, .swagger-ui .info .title, .swagger-ui .opblock-tag,
+  .swagger-ui .opblock .opblock-summary-description,
+  .swagger-ui .opblock .opblock-summary-path,
+  .swagger-ui .opblock-description-wrapper p,
+  .swagger-ui table thead tr th, .swagger-ui table thead tr td,
+  .swagger-ui .parameter__name, .swagger-ui .parameter__type,
+  .swagger-ui .response-col_status, .swagger-ui .response-col_description,
+  .swagger-ui .model, .swagger-ui .model-title,
+  .swagger-ui section.models h4, .swagger-ui label,
+  .swagger-ui .tab li, .swagger-ui .responses-inner h4, .swagger-ui .responses-inner h5 {
+    color: var(--text) !important;
+  }
+  .swagger-ui .info .base-url, .swagger-ui .parameter__in,
+  .swagger-ui .prop-format, .swagger-ui .opblock-summary-path__deprecated {
+    color: var(--muted) !important;
+  }
+  .swagger-ui .opblock { background: var(--panel); border-color: var(--border); }
+  .swagger-ui .opblock .opblock-section-header { background: var(--panel2); }
+  .swagger-ui .opblock .opblock-section-header h4 { color: var(--text); }
+  .swagger-ui section.models, .swagger-ui section.models .model-container {
+    background: var(--panel); border-color: var(--border);
+  }
+  .swagger-ui .model-box { background: var(--panel2); }
+  /* imena modela i expand gumbi imaju defaultnu svijetlu pozadinu, maknuti */
+  .swagger-ui .model-box-control, .swagger-ui .models-control,
+  .swagger-ui .model-title, .swagger-ui button.model-box-control:focus {
+    background: transparent !important; outline: none;
+  }
+  .swagger-ui section.models .model-container:hover { background: var(--panel2); }
+  /* schemas sekcija nam ne treba, sve se vidi na endpointima */
+  .swagger-ui section.models { display: none; }
+  .swagger-ui input[type=text], .swagger-ui textarea, .swagger-ui select {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+  }
+  .swagger-ui .body-param__example, .swagger-ui .microlight,
+  .swagger-ui .highlight-code, .swagger-ui pre {
+    background: #0d1014 !important;
+  }
+  .swagger-ui .scheme-container { background: var(--panel); box-shadow: none; }
+  .swagger-ui .btn { color: var(--text); border-color: var(--border); }
+  .swagger-ui .topbar { display: none; } /* swagger logo traka, ne treba nam */
+  .swagger-ui .opblock-tag { border-bottom: 1px solid var(--border); }
+  .swagger-ui .expand-operation svg, .swagger-ui .expand-methods svg,
+  .swagger-ui .arrow, .swagger-ui .model-toggle:after { filter: invert(0.8); }
+  /* link natrag na plocu */
+  .back-link {
+    display: inline-block; margin: 14px 20px 0;
+    color: #5a9bd4; font-family: system-ui, sans-serif; font-size: 13px;
+    text-decoration: none;
+  }
+</style>
+</head>
+<body>
+<a class="back-link" href="/">&larr; natrag na nadzornu ploču</a>
+<div id="swagger-ui"></div>
+<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+<script>
+SwaggerUIBundle({
+  url: "/openapi.json",
+  dom_id: "#swagger-ui",
+  presets: [SwaggerUIBundle.presets.apis],
+  layout: "BaseLayout"
+});
+</script>
+</body>
+</html>
