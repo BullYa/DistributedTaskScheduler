@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel
 from collections import deque
 import uuid
@@ -260,3 +261,18 @@ async def get_workers():
 async def health():
     alive = sum(1 for w in workers.values() if w["status"] == "alive")
     return {"status": "ok", "service": "scheduler", "aktivni_workeri": alive}
+
+
+def custom_openapi():
+    # mice automatski generirane 422 odgovore iz docsa, samo prave buku
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(title=app.title, version="1.0.0", routes=app.routes)
+    for path in schema.get("paths", {}).values():
+        for op in path.values():
+            op.get("responses", {}).pop("422", None)
+    app.openapi_schema = schema
+    return schema
+
+
+app.openapi = custom_openapi

@@ -47,6 +47,14 @@
   .swagger-ui section.models .model-container:hover { background: var(--panel2); }
   /* schemas sekcija nam ne treba, sve se vidi na endpointima */
   .swagger-ui section.models { display: none; }
+  /* visak koji samo pravi buku: links stupac (uvijek prazan), media type
+     dropdown (uvijek json) i poruka o accept headeru */
+  .swagger-ui .response-col_links,
+  .swagger-ui th.response-col_links { display: none; }
+  .swagger-ui .response-control-media-type,
+  .swagger-ui .opblock-section-request-body .content-type-wrapper,
+  .swagger-ui .body-param-content-type { display: none; }
+  .swagger-ui .response-control-media-type__accept-message { display: none; }
   .swagger-ui input[type=text], .swagger-ui textarea, .swagger-ui select {
     background: var(--panel2); color: var(--text); border: 1px solid var(--border);
   }
@@ -56,6 +64,31 @@
   }
   .swagger-ui .scheme-container { background: var(--panel); box-shadow: none; }
   .swagger-ui .btn { color: var(--text); border-color: var(--border); }
+  /* try it out gumb - istaknut i centriran u svom redu */
+  .swagger-ui .try-out {
+    flex: none;
+    margin: 0 auto;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+  .swagger-ui .opblock .opblock-section-header {
+    flex-wrap: wrap;
+  }
+  .swagger-ui .btn.try-out__btn {
+    background: #5a9bd4;
+    color: #0d1014;
+    border: none;
+    font-weight: 700;
+    padding: 8px 28px;
+    border-radius: 5px;
+  }
+  .swagger-ui .btn.try-out__btn:hover { background: #74b0e2; }
+  .swagger-ui .btn.try-out__btn.cancel {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
   .swagger-ui .topbar { display: none; } /* swagger logo traka, ne treba nam */
   .swagger-ui .opblock-tag { border-bottom: 1px solid var(--border); }
   .swagger-ui .expand-operation svg, .swagger-ui .expand-methods svg,
