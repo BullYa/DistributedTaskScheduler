@@ -1,33 +1,16 @@
 import asyncio
-import logging
+import uuid
 import os
 import socket
-import uuid
-from contextlib import asynccontextmanager
 from typing import Optional
-
-import httpx
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-    datefmt="%H:%M:%S",
-)
+import httpx
 
 WORKER_ID = str(uuid.uuid4())[:8]
-logger = logging.getLogger(f"worker-{WORKER_ID}")
-
-# konfiguracija preko env varijabli
 SCHEDULER_URL = os.getenv("SCHEDULER_URL", "http://localhost:8000")
 WORKER_PORT = int(os.getenv("WORKER_PORT", "8001"))
-TASK_DURATION = int(os.getenv("TASK_DURATION", "5"))            # koliko traje simulacija obrade
-HEARTBEAT_INTERVAL = int(os.getenv("HEARTBEAT_INTERVAL", "5"))  # koliko cesto se javljamo scheduleru
-REGISTER_RETRIES = int(os.getenv("REGISTER_RETRIES", "5"))
-REPORT_RETRIES = int(os.getenv("REPORT_RETRIES", "3"))
-HTTP_TIMEOUT = float(os.getenv("HTTP_TIMEOUT", "3"))
-
 # u dockeru je ovo ime containera, lokalno localhost
 WORKER_HOST = os.getenv("WORKER_HOST", "localhost")
 if WORKER_HOST == "auto":
@@ -35,51 +18,41 @@ if WORKER_HOST == "auto":
     WORKER_HOST = socket.gethostname()
 WORKER_URL = f"http://{WORKER_HOST}:{WORKER_PORT}"
 
-
-class TaskStatus:
-    RECEIVED = "received"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-
-
-# evidencija zadataka na ovom workeru
 active_tasks: dict = {}
 
 
-async def post_json(url: str, data: dict, timeout: float = HTTP_TIMEOUT):
-    """Mali helper da se ne ponavlja isti httpx blok svugdje."""
-    async with httpx.AsyncClient() as client:
-        return await client.post(url, json=data, timeout=timeout)
-
-
 async def send_heartbeat():
-    """Periodicki javimo scheduleru da smo zivi i koliko posla imamo."""
+    """Svakih 5 sekundi javimo scheduleru da smo zivi i koliko posla imamo."""
     await asyncio.sleep(3)  # da se scheduler stigne dici
     while True:
-        in_progress = sum(1 for t in active_tasks.values() if t["status"] == TaskStatus.IN_PROGRESS)
+        in_progress = sum(1 for t in active_tasks.values() if t["status"] == "in_progress")
         try:
-            await post_json(
-                f"{SCHEDULER_URL}/heartbeat",
-                {"worker_id": WORKER_ID, "active_tasks": in_progress},
-            )
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{SCHEDULER_URL}/heartbeat",
+                    json={"worker_id": WORKER_ID, "active_tasks": in_progress},
+                    timeout=3.0
+                )
         except Exception as e:
-            logger.warning("heartbeat nije uspio: %s", e)
-        await asyncio.sleep(HEARTBEAT_INTERVAL)
+            print(f"[WORKER-{WORKER_ID}] heartbeat nije uspio: {e}")
+        await asyncio.sleep(5)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # prijavimo se scheduleru, par pokusaja za slucaj da se on jos dize
-    for attempt in range(REGISTER_RETRIES):
+    for attempt in range(5):
         try:
-            await post_json(
-                f"{SCHEDULER_URL}/register",
-                {"worker_id": WORKER_ID, "url": WORKER_URL},
-            )
-            logger.info("registriran @ %s", SCHEDULER_URL)
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{SCHEDULER_URL}/register",
+                    json={"worker_id": WORKER_ID, "url": WORKER_URL},
+                    timeout=3.0
+                )
+            print(f"[WORKER-{WORKER_ID}] registriran @ {SCHEDULER_URL}")
             break
         except Exception as e:
-            logger.warning("registracija neuspjesna (%d/%d): %s", attempt + 1, REGISTER_RETRIES, e)
+            print(f"[WORKER-{WORKER_ID}] registracija neuspješna ({attempt + 1}/5): {e}")
             await asyncio.sleep(2)
 
     asyncio.create_task(send_heartbeat())
@@ -105,30 +78,31 @@ class TaskResult(BaseModel):
 async def report_completed(task_id: str, result: str):
     """Javimo scheduleru da je zadatak gotov."""
     # par pokusaja, ako potvrda ne prodje zadatak bi kod schedulera visio kao dispatched zauvijek
-    for attempt in range(REPORT_RETRIES):
+    for attempt in range(3):
         try:
-            await post_json(
-                f"{SCHEDULER_URL}/task-completed",
-                {"task_id": task_id, "worker_id": WORKER_ID, "result": result},
-            )
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{SCHEDULER_URL}/task-completed",
+                    json={"task_id": task_id, "worker_id": WORKER_ID, "result": result},
+                    timeout=3.0
+                )
             return
         except Exception as e:
-            logger.warning("javljanje rezultata za %s nije proslo (%d/%d): %s",
-                           task_id, attempt + 1, REPORT_RETRIES, e)
+            print(f"[WORKER-{WORKER_ID}] javljanje rezultata za {task_id} nije proslo ({attempt + 1}/3): {e}")
             await asyncio.sleep(2)
 
 
 async def process_task(task_id: str, name: str, payload: str):
-    logger.info("pocinjem: %s | %s", task_id, name)
-    active_tasks[task_id]["status"] = TaskStatus.IN_PROGRESS
+    print(f"[WORKER-{WORKER_ID}] počinjem: {task_id} | {name}")
+    active_tasks[task_id]["status"] = "in_progress"
 
     # simulacija posla, sleep je async pa u meduvremenu normalno primamo nove zadatke
-    await asyncio.sleep(TASK_DURATION)
+    await asyncio.sleep(5)
 
     result = f"Zadatak '{name}' izvršen. Payload: {payload}"
-    active_tasks[task_id]["status"] = TaskStatus.COMPLETED
+    active_tasks[task_id]["status"] = "completed"
     active_tasks[task_id]["result"] = result
-    logger.info("zavrsio: %s", task_id)
+    print(f"[WORKER-{WORKER_ID}] završio: {task_id}")
 
     await report_completed(task_id, result)
 
@@ -139,8 +113,8 @@ async def execute_task(task: TaskRequest):
         "task_id": task.task_id,
         "name": task.name,
         "payload": task.payload,
-        "status": TaskStatus.RECEIVED,
-        "result": None,
+        "status": "received",
+        "result": None
     }
 
     # obrada ide u pozadini, scheduleru odmah vracamo da smo preuzeli
@@ -150,7 +124,7 @@ async def execute_task(task: TaskRequest):
         task_id=task.task_id,
         worker_id=WORKER_ID,
         status="accepted",
-        result=f"worker {WORKER_ID} preuzeo zadatak",
+        result=f"worker {WORKER_ID} preuzeo zadatak"
     )
 
 
@@ -163,17 +137,17 @@ async def get_task_status(task_id: str):
         task_id=t["task_id"],
         worker_id=WORKER_ID,
         status=t["status"],
-        result=t.get("result"),
+        result=t.get("result")
     )
 
 
 @app.get("/status")
 async def get_worker_status():
-    in_progress = sum(1 for t in active_tasks.values() if t["status"] == TaskStatus.IN_PROGRESS)
+    in_progress = sum(1 for t in active_tasks.values() if t["status"] == "in_progress")
     return {
         "worker_id": WORKER_ID,
         "aktivni_zadaci": in_progress,
-        "ukupno_obradeno": len(active_tasks),
+        "ukupno_obradeno": len(active_tasks)
     }
 
 
